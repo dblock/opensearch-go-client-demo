@@ -44,8 +44,10 @@ func main() {
 		fmt.Printf("%s: %s\n", version["distribution"], version["number"])
 	}
 
+	index_name := "movies"
+
 	// create an index
-	if _, err := client.Indices.Create("test-index", client.Indices.Create.WithWaitForActiveShards("1")); err != nil {
+	if _, err := client.Indices.Create(index_name, client.Indices.Create.WithWaitForActiveShards("1")); err != nil {
 		log.Fatal("indices.create", err)
 	}
 
@@ -56,7 +58,7 @@ func main() {
 		"year":     "2011",
 	})
 
-	if _, err := client.Index("test-index", strings.NewReader(string(document)), client.Index.WithDocumentID(("1"))); err != nil {
+	if _, err := client.Index(index_name, strings.NewReader(string(document)), client.Index.WithDocumentID(("1"))); err != nil {
 		log.Fatal("index", err)
 	}
 
@@ -83,12 +85,12 @@ func main() {
 	}
 
 	// delete the document
-	if _, err := client.Delete("test-index", "1"); err != nil {
+	if _, err := client.Delete(index_name, "1"); err != nil {
 		log.Fatal("delete", err)
 	}
 
 	// delete the index
-	if _, err := client.Indices.Delete([]string{"test-index"}, client.Indices.Delete.WithIgnoreUnavailable(true)); err != nil {
+	if _, err := client.Indices.Delete([]string{index_name}, client.Indices.Delete.WithIgnoreUnavailable(true)); err != nil {
 		log.Fatal("indices.delete", err)
 	}
 }

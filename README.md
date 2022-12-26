@@ -32,7 +32,7 @@ This will output the version of OpenSearch and a search result.
 
 ```
 opensearch: 2.3.0
-[map[_id:1 _index:test-index _score:0.2876821 _source:map[director:Bennett Miller title:Moneyball year:2011]]]
+[map[_id:1 _index:movies _score:0.18232156 _source:map[director:Bennett Miller title:Moneyball year:2011]]]
 ```
 
 The [code](main.go) will create an index, add a document to it, search, then cleanup.
