@@ -1,6 +1,6 @@
 # OpenSearch Go Client Demo
 
-Makes requests to Amazon OpenSearch using the [OpenSearch Go Client](https://github.com/opensearch-project/opensearch-go).
+Makes requests to Amazon OpenSearch using the [OpenSearch Go Client](https://github.com/opensearch-project/opensearch-go). Works for both managed OpenSearch and OpenSearch Serverless since version 2.2.0.
 
 ## Prerequisites
 
@@ -23,6 +23,7 @@ export AWS_SECRET_ACCESS_KEY=
 export AWS_SESSION_TOKEN=
 export AWS_REGION=us-west2
 
+export SERVICE=es # use aoss for OpenSearch Serverless
 export ENDPOINT=https://....us-west-2.es.amazonaws.com
 
 $ go run main.go
