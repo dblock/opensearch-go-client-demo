@@ -25,9 +25,9 @@ func main() {
 	cfg, _ := config.LoadDefaultConfig(ctx)
 	signer, _ := requestsigner.NewSigner(cfg)
 
-	endpoint, present := os.LookupEnv("OPENSEARCH_ENDPOINT")
+	endpoint, present := os.LookupEnv("ENDPOINT")
 	if !present {
-		log.Fatal("OPENSEARCH_ENDPOINT missing")
+		log.Fatal("ENDPOINT missing")
 	}
 
 	client, _ := opensearch.NewClient(opensearch.Config{

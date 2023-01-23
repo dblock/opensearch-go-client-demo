@@ -3,8 +3,13 @@ module github.com/dblock/opensearch-go-client-demo
 go 1.19
 
 require (
+	github.com/aws/aws-sdk-go v1.44.45
+	github.com/aws/aws-sdk-go-v2/config v1.18.7
+	github.com/opensearch-project/opensearch-go/v2 v2.1.0
+)
+
+require (
 	github.com/aws/aws-sdk-go-v2 v1.17.3 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.18.7 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.7 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.27 // indirect
@@ -15,6 +20,5 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.7 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
-	github.com/opensearch-project/opensearch-go v1.1.0 // indirect
-	github.com/opensearch-project/opensearch-go/v2 v2.1.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 )
