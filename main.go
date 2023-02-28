@@ -65,6 +65,10 @@ func main() {
 	// create an index
 	if resp, err := client.Indices.Create(index_name, client.Indices.Create.WithWaitForActiveShards("1")); err != nil {
 		log.Fatal("indices.create: ", err)
+		os.Exit(1)
+	} else if resp.IsError() {
+		log.Fatal("indices.create: ", resp)
+		os.Exit(1)
 	} else {
 		log.Print(resp)
 	}
@@ -82,6 +86,10 @@ func main() {
 
 	if resp, err := client.Index(index_name, strings.NewReader(string(document)), client.Index.WithDocumentID(("1"))); err != nil {
 		log.Fatal("index: ", err)
+		os.Exit(1)
+	} else if resp.IsError() {
+		log.Fatal("index: ", err)
+		os.Exit(1)
 	} else {
 		log.Print(resp)
 	}
@@ -101,10 +109,15 @@ func main() {
 
 	if err != nil {
 		log.Fatal("json: ", err)
+		os.Exit(1)
 	}
 
 	if resp, err := client.Search(client.Search.WithBody(strings.NewReader(string(query)))); err != nil {
 		log.Fatal("index", err)
+		os.Exit(1)
+	} else if resp.IsError() {
+		log.Fatal("index", err)
+		os.Exit(1)
 	} else {
 		var r map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&r)
@@ -115,6 +128,10 @@ func main() {
 	// delete the document
 	if resp, err := client.Delete(index_name, "1"); err != nil {
 		log.Fatal("delete: ", err)
+		os.Exit(1)
+	} else if resp.IsError() {
+		log.Fatal("delete: ", err)
+		os.Exit(1)
 	} else {
 		log.Print(resp)
 	}
@@ -122,7 +139,13 @@ func main() {
 	// delete the index
 	if resp, err := client.Indices.Delete([]string{index_name}, client.Indices.Delete.WithIgnoreUnavailable(true)); err != nil {
 		log.Fatal("indices.delete: ", err)
+		os.Exit(1)
+	} else if resp.IsError() {
+		log.Fatal("indices.delete: ", err)
+		os.Exit(1)
 	} else {
 		log.Print(resp)
 	}
+
+	os.Exit(0)
 }
