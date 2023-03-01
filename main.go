@@ -9,7 +9,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -17,16 +19,17 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/opensearch-project/opensearch-go/v2"
+	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
 	requestsigner "github.com/opensearch-project/opensearch-go/v2/signer/awsv2"
 )
 
-func main() {
+func mainWithError() error {
 	ctx := context.Background()
 	cfg, _ := config.LoadDefaultConfig(ctx)
 
 	endpoint, endpoint_present := os.LookupEnv("ENDPOINT")
 	if !endpoint_present {
-		log.Fatal("ENDPOINT missing")
+		return errors.New("ENDPOINT missing")
 	}
 
 	service, service_present := os.LookupEnv("SERVICE")
@@ -36,7 +39,7 @@ func main() {
 
 	signer, err := requestsigner.NewSignerWithService(cfg, service)
 	if err != nil {
-		log.Fatal("signer: ", err)
+		return err
 	}
 
 	client, err := opensearch.NewClient(opensearch.Config{
@@ -45,13 +48,13 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatal("client: ", err)
+		return err
 	}
 
 	// TODO: remove when OpenSearch Serverless adds /
 	if service == "es" {
 		if info, err := client.Info(); err != nil {
-			log.Fatal("info", err)
+			return err
 		} else {
 			var r map[string]interface{}
 			json.NewDecoder(info.Body).Decode(&r)
@@ -62,15 +65,13 @@ func main() {
 
 	index_name := "movies"
 
-	// create an index
-	if resp, err := client.Indices.Create(index_name, client.Indices.Create.WithWaitForActiveShards("1")); err != nil {
-		log.Fatal("indices.create: ", err)
-		os.Exit(1)
-	} else if resp.IsError() {
-		log.Fatal("indices.create: ", resp)
-		os.Exit(1)
-	} else {
-		log.Print(resp)
+	if _, err := opensearchDo(ctx, client, &opensearchapi.IndicesCreateRequest{
+		Index:               index_name,
+		WaitForActiveShards: "1",
+	}); err != nil {
+		if !strings.Contains(err.Error(), "resource_already_exists_exception") {
+			return err
+		}
 	}
 
 	// index a document
@@ -81,21 +82,19 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatal("json: ", err)
+		return err
 	}
 
-	if resp, err := client.Index(index_name, strings.NewReader(string(document)), client.Index.WithDocumentID(("1"))); err != nil {
-		log.Fatal("index: ", err)
-		os.Exit(1)
-	} else if resp.IsError() {
-		log.Fatal("index: ", err)
-		os.Exit(1)
-	} else {
-		log.Print(resp)
+	if _, err := opensearchDo(ctx, client, &opensearchapi.IndexRequest{
+		Index:      index_name,
+		Body:       strings.NewReader(string(document)),
+		DocumentID: "1",
+	}); err != nil {
+		return err
 	}
 
 	// wait for the document to index
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	// search for the document
 	query, err := json.Marshal(map[string]interface{}{
@@ -108,44 +107,62 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatal("json: ", err)
-		os.Exit(1)
+		return err
 	}
 
-	if resp, err := client.Search(client.Search.WithBody(strings.NewReader(string(query)))); err != nil {
-		log.Fatal("index", err)
-		os.Exit(1)
-	} else if resp.IsError() {
-		log.Fatal("index", err)
-		os.Exit(1)
-	} else {
-		var r map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&r)
+	resp, err := opensearchDo(ctx, client, &opensearchapi.SearchRequest{
+		Body: strings.NewReader(string(query)),
+	})
+
+	if err != nil {
+		return err
+	}
+
+	var r map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&r)
+
+	if r != nil {
 		hits := r["hits"].(map[string]interface{})["hits"]
 		fmt.Println(hits)
 	}
 
-	// delete the document
-	if resp, err := client.Delete(index_name, "1"); err != nil {
-		log.Fatal("delete: ", err)
-		os.Exit(1)
-	} else if resp.IsError() {
-		log.Fatal("delete: ", err)
-		os.Exit(1)
-	} else {
-		log.Print(resp)
+	if _, err := opensearchDo(ctx, client, &opensearchapi.DeleteRequest{
+		Index:      index_name,
+		DocumentID: "1",
+	}); err != nil {
+		return err
 	}
 
-	// delete the index
-	if resp, err := client.Indices.Delete([]string{index_name}, client.Indices.Delete.WithIgnoreUnavailable(true)); err != nil {
-		log.Fatal("indices.delete: ", err)
-		os.Exit(1)
-	} else if resp.IsError() {
-		log.Fatal("indices.delete: ", err)
-		os.Exit(1)
-	} else {
-		log.Print(resp)
+	if _, err := opensearchDo(ctx, client, &opensearchapi.IndicesDeleteRequest{
+		Index:             []string{index_name},
+		IgnoreUnavailable: opensearchapi.BoolPtr(true),
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	if err := mainWithError(); err != nil {
+		log.Fatal(err.Error())
 	}
 
 	os.Exit(0)
+}
+
+func opensearchDo(ctx context.Context, osClient *opensearch.Client, req opensearchapi.Request) (*opensearchapi.Response, error) {
+	resp, err := req.Do(ctx, osClient)
+	if err != nil {
+		return resp, err
+	}
+	if resp.IsError() {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return resp, err
+		}
+		// TODO: parse JSON error into a structure
+		return nil, fmt.Errorf("status: %v, msg: %s", resp.StatusCode, string(body))
+	}
+	return resp, nil
 }
