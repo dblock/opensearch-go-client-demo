@@ -11,16 +11,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/opensearch-project/opensearch-go/v2"
-	"github.com/opensearch-project/opensearch-go/v2/opensearchapi"
-	requestsigner "github.com/opensearch-project/opensearch-go/v2/signer/awsv2"
+	"github.com/opensearch-project/opensearch-go/v3"
+	"github.com/opensearch-project/opensearch-go/v3/opensearchapi"
+	"github.com/opensearch-project/opensearch-go/v3/opensearchutil"
+	requestsigner "github.com/opensearch-project/opensearch-go/v3/signer/awsv2"
 )
 
 func mainWithError() error {
@@ -42,10 +42,14 @@ func mainWithError() error {
 		return err
 	}
 
-	client, err := opensearch.NewClient(opensearch.Config{
-		Addresses: []string{endpoint},
-		Signer:    signer,
-	})
+	client, err := opensearchapi.NewClient(
+		opensearchapi.Config{
+			Client: opensearch.Config{
+				Addresses: []string{endpoint},
+				Signer:    signer,
+			},
+		},
+	)
 
 	if err != nil {
 		return err
@@ -53,42 +57,54 @@ func mainWithError() error {
 
 	// TODO: remove when OpenSearch Serverless adds /
 	if service == "es" {
-		if info, err := client.Info(); err != nil {
+		if info, err := client.Info(ctx, &opensearchapi.InfoReq{}); err != nil {
 			return err
 		} else {
-			var r map[string]interface{}
-			json.NewDecoder(info.Body).Decode(&r)
-			version := r["version"].(map[string]interface{})
-			fmt.Printf("%s: %s\n", version["distribution"], version["number"])
+			fmt.Printf("%s: %s\n", info.Version.Distribution, info.Version.Number)
 		}
 	}
 
 	index_name := "movies"
 
-	if _, err := opensearchDo(ctx, client, &opensearchapi.IndicesCreateRequest{
-		Index:               index_name,
-		WaitForActiveShards: "1",
-	}); err != nil {
-		if !strings.Contains(err.Error(), "resource_already_exists_exception") {
+	if _, err := client.Indices.Create(
+		ctx,
+		opensearchapi.IndicesCreateReq{
+			Index:  index_name,
+			Body:   strings.NewReader(`{"settings": {"number_of_shards": 1, "number_of_replicas": 0}}`),
+			Params: opensearchapi.IndicesCreateParams{WaitForActiveShards: "1"},
+		},
+	); err != nil {
+		var opensearchError opensearchapi.Error
+		if errors.As(err, &opensearchError) {
+			if opensearchError.Err.Type != "resource_already_exists_exception" {
+				return err
+			}
+		} else {
 			return err
 		}
 	}
 
 	// index a document
-	document, err := json.Marshal(map[string]interface{}{
-		"title":    "Moneyball",
-		"director": "Bennett Miller",
-		"year":     "2011",
-	})
+	type Movie struct {
+		Title    string `json:"title"`
+		Director string `json:"director"`
+		Year     string `json:"year"`
+	}
+
+	document := Movie{
+		Title:    "Moneyball",
+		Director: "Bennett Miller",
+		Year:     "2011",
+	}
 
 	if err != nil {
 		return err
 	}
 
-	if _, err := opensearchDo(ctx, client, &opensearchapi.IndexRequest{
+	if _, err := client.Index(ctx, opensearchapi.IndexReq{
 		Index:      index_name,
-		Body:       strings.NewReader(string(document)),
 		DocumentID: "1",
+		Body:       opensearchutil.NewJSONReader(document),
 	}); err != nil {
 		return err
 	}
@@ -110,32 +126,36 @@ func mainWithError() error {
 		return err
 	}
 
-	resp, err := opensearchDo(ctx, client, &opensearchapi.SearchRequest{
-		Body: strings.NewReader(string(query)),
+	resp, err := client.Search(ctx, &opensearchapi.SearchReq{
+		Indices: []string{index_name},
+		Body:    strings.NewReader(string(query)),
 	})
 
 	if err != nil {
 		return err
 	}
 
-	var r map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&r)
+	if resp.Hits.Total.Value > 0 {
+		for _, hit := range resp.Hits.Hits {
+			var movie Movie
+			if err := json.Unmarshal([]byte(hit.Source), &movie); err != nil {
+				return err
+			}
 
-	if r != nil {
-		hits := r["hits"].(map[string]interface{})["hits"]
-		fmt.Println(hits)
+			fmt.Printf("%s: %s\n", hit.ID, movie)
+		}
 	}
 
-	if _, err := opensearchDo(ctx, client, &opensearchapi.DeleteRequest{
+	if _, err := client.Document.Delete(ctx, opensearchapi.DocumentDeleteReq{
 		Index:      index_name,
 		DocumentID: "1",
 	}); err != nil {
 		return err
 	}
 
-	if _, err := opensearchDo(ctx, client, &opensearchapi.IndicesDeleteRequest{
-		Index:             []string{index_name},
-		IgnoreUnavailable: opensearchapi.BoolPtr(true),
+	if _, err := client.Indices.Delete(ctx, opensearchapi.IndicesDeleteReq{
+		Indices: []string{index_name},
+		Params:  opensearchapi.IndicesDeleteParams{IgnoreUnavailable: opensearchapi.ToPointer(true)},
 	}); err != nil {
 		return err
 	}
@@ -149,20 +169,4 @@ func main() {
 	}
 
 	os.Exit(0)
-}
-
-func opensearchDo(ctx context.Context, osClient *opensearch.Client, req opensearchapi.Request) (*opensearchapi.Response, error) {
-	resp, err := req.Do(ctx, osClient)
-	if err != nil {
-		return resp, err
-	}
-	if resp.IsError() {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return resp, err
-		}
-		// TODO: parse JSON error into a structure
-		return nil, fmt.Errorf("status: %v, msg: %s", resp.StatusCode, string(body))
-	}
-	return resp, nil
 }
