@@ -1,6 +1,6 @@
 # OpenSearch Go Client Demo
 
-Makes requests to Amazon OpenSearch using the [OpenSearch Go Client](https://github.com/opensearch-project/opensearch-go). Works for both managed OpenSearch and OpenSearch Serverless since version 2.2.0.
+Makes requests to Amazon OpenSearch using the [OpenSearch Go Client](https://github.com/opensearch-project/opensearch-go) with AWS SDK [v1](aws-sdk-v1) and [v2](aws-sdk-v2). Works for both managed OpenSearch and OpenSearch Serverless since version 2.2.0.
 
 ## Prerequisites
 
@@ -16,6 +16,8 @@ go version go1.19.4 darwin/arm64
 ## Running
 
 Create an OpenSearch domain in (AWS) which support IAM based AuthN/AuthZ.
+
+From within [aws-sdk-v1](aws-sdk-v1) or [aws-sdk-v2](aws-sdk-v2) run the following.
 
 ```
 export AWS_ACCESS_KEY_ID=
